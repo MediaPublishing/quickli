@@ -1,0 +1,10 @@
+{
+  "id": "quickli-share",
+  "name": "Quickli Share",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Share notes to a WordPress site via unlisted Quickli links.",
+  "author": "Quickli",
+  "authorUrl": "https://quickli.net",
+  "isDesktopOnly": false
+}
