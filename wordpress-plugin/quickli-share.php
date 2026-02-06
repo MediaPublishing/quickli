@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Quickli Share
- * Description: Share Obsidian notes via unlisted WordPress URLs with optional passwords and expiry.
- * Version: 0.1.0
+ * Description: Share Obsidian notes via unlisted WordPress URLs with optional passwords and expiry. Includes vault:// redirect for Discord-clickable Obsidian links.
+ * Version: 0.2.0
  * Author: Quickli
  */
 
@@ -10,7 +10,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('QUICKLI_SHARE_VERSION', '0.1.0');
+define('QUICKLI_SHARE_VERSION', '0.2.0');
+define('QUICKLI_SHARE_VAULT_SLUG', 'vault');
 define('QUICKLI_SHARE_CPT', 'quickli_share');
 define('QUICKLI_SHARE_QUERY_VAR', 'quickli_share_token');
 define('QUICKLI_SHARE_SLUG', 'q');
@@ -54,11 +55,18 @@ function quickli_share_add_rewrite() {
         'index.php?' . QUICKLI_SHARE_QUERY_VAR . '=$matches[1]',
         'top'
     );
+    // Vault redirect: /vault/{base64_encoded_path} → obsidian:// protocol
+    add_rewrite_rule(
+        '^' . QUICKLI_SHARE_VAULT_SLUG . '/(.+)$',
+        'index.php?quickli_vault_path=$matches[1]',
+        'top'
+    );
 }
 add_action('init', 'quickli_share_add_rewrite');
 
 function quickli_share_query_vars($vars) {
     $vars[] = QUICKLI_SHARE_QUERY_VAR;
+    $vars[] = 'quickli_vault_path';
     return $vars;
 }
 add_filter('query_vars', 'quickli_share_query_vars');
@@ -106,6 +114,13 @@ function quickli_share_cleanup_expired() {
 add_action('quickli_share_cleanup', 'quickli_share_cleanup_expired');
 
 function quickli_share_template_redirect() {
+    // Handle vault redirect first
+    $vault_path = get_query_var('quickli_vault_path');
+    if ($vault_path) {
+        quickli_vault_redirect($vault_path);
+        exit;
+    }
+
     $token = get_query_var(QUICKLI_SHARE_QUERY_VAR);
     if (!$token) {
         return;
@@ -115,6 +130,68 @@ function quickli_share_template_redirect() {
     exit;
 }
 add_action('template_redirect', 'quickli_share_template_redirect');
+
+/**
+ * Vault Redirect: Renders a page that redirects to obsidian:// protocol.
+ * URL format: /vault/{vault_name}/{file_path}
+ * Example: /vault/!Vault/Daily/2026/2026-02-06
+ * 
+ * Security: No data is exposed. The page just triggers a local protocol redirect.
+ * The vault path is only meaningful if Obsidian is installed locally with that vault.
+ */
+function quickli_vault_redirect($raw_path) {
+    // Parse: first segment = vault name, rest = file path
+    $segments = explode('/', $raw_path, 2);
+    $vault = urldecode($segments[0]);
+    $file = isset($segments[1]) ? urldecode($segments[1]) : '';
+
+    // Remove .md extension if present (Obsidian doesn't need it)
+    $file = preg_replace('/\.md$/', '', $file);
+
+    // Build obsidian:// URI
+    $obsidian_uri = 'obsidian://open?' . http_build_query(array(
+        'vault' => $vault,
+        'file' => $file,
+    ));
+
+    // Security headers
+    header('X-Robots-Tag: noindex, nofollow, noarchive', true);
+    nocache_headers();
+
+    $safe_file = esc_html(basename($file) ?: $vault);
+    $safe_uri = esc_attr($obsidian_uri);
+    $safe_vault = esc_html($vault);
+    $safe_path = esc_html($file);
+
+    echo '<!doctype html>';
+    echo '<html><head>';
+    echo '<meta charset="utf-8">';
+    echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
+    echo '<meta name="robots" content="noindex, nofollow">';
+    echo '<title>Open in Obsidian · ' . $safe_file . '</title>';
+    echo '<style>';
+    echo 'body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0;}';
+    echo '.card{text-align:center;padding:48px;background:#16213e;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-width:480px;}';
+    echo '.icon{font-size:48px;margin-bottom:16px;}';
+    echo 'h1{font-size:20px;margin:0 0 8px;color:#fff;}';
+    echo '.path{font-size:13px;color:#888;margin-bottom:24px;word-break:break-all;font-family:ui-monospace,monospace;}';
+    echo '.btn{display:inline-block;padding:12px 32px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;transition:background 0.2s;}';
+    echo '.btn:hover{background:#6d28d9;}';
+    echo '.hint{font-size:12px;color:#666;margin-top:20px;}';
+    echo '</style>';
+    echo '</head><body>';
+    echo '<div class="card">';
+    echo '<div class="icon">🔮</div>';
+    echo '<h1>Open in Obsidian</h1>';
+    echo '<p class="path">' . $safe_vault . ' / ' . $safe_path . '</p>';
+    echo '<a class="btn" href="' . $safe_uri . '" id="open-btn">Open Note</a>';
+    echo '<p class="hint">Requires Obsidian with vault "' . $safe_vault . '" on this device.</p>';
+    echo '</div>';
+    echo '<script>';
+    echo 'setTimeout(function(){try{window.location.href="' . esc_js($obsidian_uri) . '";}catch(e){}},500);';
+    echo '</script>';
+    echo '</body></html>';
+}
 
 function quickli_share_render_by_token($token) {
     $post_id = quickli_share_find_post_id_by_token($token);
