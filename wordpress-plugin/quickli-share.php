@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Quickli Share
  * Description: Share Obsidian notes via unlisted WordPress URLs with optional passwords and expiry. Includes vault:// redirect for Discord-clickable Obsidian links.
- * Version: 0.2.0
+ * Version: 0.3.0
  * Author: Quickli
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('QUICKLI_SHARE_VERSION', '0.2.0');
+define('QUICKLI_SHARE_VERSION', '0.3.0');
 define('QUICKLI_SHARE_VAULT_SLUG', 'vault');
 define('QUICKLI_SHARE_CPT', 'quickli_share');
 define('QUICKLI_SHARE_QUERY_VAR', 'quickli_share_token');
@@ -154,43 +154,95 @@ function quickli_vault_redirect($raw_path) {
         'file' => $file,
     ));
 
-    // Security headers
+    // Discard any WordPress output buffers to prevent encoding corruption
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+
+    // Security + encoding headers
+    header('Content-Type: text/html; charset=utf-8', true);
+    header('X-Quickli-Vault: v3', true);
     header('X-Robots-Tag: noindex, nofollow, noarchive', true);
     nocache_headers();
 
-    $safe_file = esc_html(basename($file) ?: $vault);
-    $safe_uri = esc_attr($obsidian_uri);
-    $safe_vault = esc_html($vault);
-    $safe_path = esc_html($file);
+    $safe_file = htmlspecialchars(basename($file) ?: $vault, ENT_QUOTES, 'UTF-8');
+    $safe_uri = htmlspecialchars($obsidian_uri, ENT_QUOTES, 'UTF-8');
+    $safe_vault = htmlspecialchars($vault, ENT_QUOTES, 'UTF-8');
+    $safe_path = htmlspecialchars($file, ENT_QUOTES, 'UTF-8');
+    // For JS context: JSON-encode the raw URI (produces valid JS string, no HTML entities)
+    $js_uri = json_encode($obsidian_uri, JSON_UNESCAPED_SLASHES);
 
-    echo '<!doctype html>';
-    echo '<html><head>';
-    echo '<meta charset="utf-8">';
-    echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
-    echo '<meta name="robots" content="noindex, nofollow">';
-    echo '<title>Open in Obsidian · ' . $safe_file . '</title>';
-    echo '<style>';
-    echo 'body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0;}';
-    echo '.card{text-align:center;padding:48px;background:#16213e;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-width:480px;}';
-    echo '.icon{font-size:48px;margin-bottom:16px;}';
-    echo 'h1{font-size:20px;margin:0 0 8px;color:#fff;}';
-    echo '.path{font-size:13px;color:#888;margin-bottom:24px;word-break:break-all;font-family:ui-monospace,monospace;}';
-    echo '.btn{display:inline-block;padding:12px 32px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;transition:background 0.2s;}';
-    echo '.btn:hover{background:#6d28d9;}';
-    echo '.hint{font-size:12px;color:#666;margin-top:20px;}';
-    echo '</style>';
-    echo '</head><body>';
-    echo '<div class="card">';
-    echo '<div class="icon">🔮</div>';
-    echo '<h1>Open in Obsidian</h1>';
-    echo '<p class="path">' . $safe_vault . ' / ' . $safe_path . '</p>';
-    echo '<a class="btn" href="' . $safe_uri . '" id="open-btn">Open Note</a>';
-    echo '<p class="hint">Requires Obsidian with vault "' . $safe_vault . '" on this device.</p>';
-    echo '</div>';
-    echo '<script>';
-    echo 'setTimeout(function(){try{window.location.href="' . esc_js($obsidian_uri) . '";}catch(e){}},500);';
-    echo '</script>';
-    echo '</body></html>';
+    // Output as a single string to avoid WP output buffer interference
+    $html = '<!doctype html>'
+        . '<html><head>'
+        . '<meta charset="utf-8">'
+        . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<meta name="robots" content="noindex, nofollow">'
+        . '<title>Open in Obsidian - ' . $safe_file . '</title>'
+        . '<style>'
+        . 'body{font-family:system-ui,-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0;}'
+        . '.card{text-align:center;padding:48px;background:#16213e;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-width:480px;margin:16px;}'
+        . 'h1{font-size:20px;margin:0 0 8px;color:#fff;}'
+        . '.path{font-size:13px;color:#888;margin-bottom:24px;word-break:break-all;font-family:ui-monospace,monospace;}'
+        . '.btn{display:inline-block;padding:12px 32px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;transition:background 0.2s;border:none;cursor:pointer;}'
+        . '.btn:hover{background:#6d28d9;}'
+        . '.btn-secondary{background:#374151;margin-left:8px;}'
+        . '.btn-secondary:hover{background:#4b5563;}'
+        . '.btn-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}'
+        . '.hint{font-size:12px;color:#888;margin-top:20px;line-height:1.6;}'
+        . '.troubleshoot{background:#1e293b;border-radius:8px;padding:16px;margin-top:24px;text-align:left;font-size:13px;}'
+        . '.troubleshoot-title{font-weight:600;color:#f59e0b;margin-bottom:8px;font-size:14px;}'
+        . '.troubleshoot ul{margin:0;padding-left:20px;color:#94a3b8;}'
+        . '.troubleshoot li{margin-bottom:6px;}'
+        . '.uri-box{background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px 12px;margin-top:16px;font-family:ui-monospace,monospace;font-size:11px;word-break:break-all;color:#64748b;position:relative;}'
+        . '.uri-box code{color:#94a3b8;}'
+        . '.copy-btn{position:absolute;top:6px;right:6px;background:#475569;border:none;color:#fff;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;}'
+        . '.copy-btn:hover{background:#64748b;}'
+        . '.copy-btn.copied{background:#22c55e;}'
+        . '.status{font-size:13px;color:#22c55e;margin-top:12px;display:none;}'
+        . '.status.error{color:#f59e0b;}'
+        . '</style>'
+        . '</head><body>'
+        . '<div class="card">'
+        . '<h1>Open in Obsidian</h1>'
+        . '<p class="path">' . $safe_vault . ' / ' . $safe_path . '</p>'
+        . '<div class="btn-row">'
+        . '<a class="btn" href="' . $safe_uri . '" id="open-btn">Open Note</a>'
+        . '</div>'
+        . '<p class="status" id="status"></p>'
+        . '<p class="hint">Requires <strong>Obsidian</strong> with vault &quot;' . $safe_vault . '&quot; on this device.</p>'
+        . '<div class="troubleshoot">'
+        . '<div class="troubleshoot-title">💡 Not opening?</div>'
+        . '<ul>'
+        . '<li><strong>Discord/In-App Browser:</strong> Tap ⋮ → "Open in Browser" (Safari/Chrome)</li>'
+        . '<li><strong>Mobile:</strong> Make sure Obsidian is installed and the vault is synced</li>'
+        . '<li><strong>Desktop:</strong> Obsidian must have opened this vault at least once</li>'
+        . '</ul>'
+        . '<div class="uri-box">'
+        . '<code id="uri-text">' . $safe_uri . '</code>'
+        . '<button class="copy-btn" id="copy-btn" onclick="copyUri()">Copy</button>'
+        . '</div>'
+        . '</div>'
+        . '</div>'
+        . '<script>'
+        . 'var obsUri=' . $js_uri . ';'
+        . 'function copyUri(){'
+        . 'navigator.clipboard.writeText(obsUri).then(function(){'
+        . 'var b=document.getElementById("copy-btn");b.textContent="Copied!";b.classList.add("copied");'
+        . 'setTimeout(function(){b.textContent="Copy";b.classList.remove("copied");},2000);'
+        . '}).catch(function(){prompt("Copy this URL:",obsUri);});'
+        . '}'
+        . 'function tryOpen(){'
+        . 'var s=document.getElementById("status");'
+        . 'try{window.location.href=obsUri;s.textContent="Launching Obsidian...";s.className="status";s.style.display="block";}'
+        . 'catch(e){s.textContent="Could not launch automatically. Use the button or copy the link below.";s.className="status error";s.style.display="block";}'
+        . '}'
+        . 'setTimeout(tryOpen,400);'
+        . '</script>'
+        . '</body></html>';
+
+    echo $html;
+    exit;
 }
 
 function quickli_share_render_by_token($token) {
