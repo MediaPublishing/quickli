@@ -184,7 +184,7 @@ Before publishing this repository:
 
 Current versions in this repo:
 
-- WordPress plugin header: `0.3.0`
+- WordPress plugin header: `0.4.0`
 - Obsidian manifest: `0.1.0`
 
 ---
