@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Quickli Share
  * Description: Share Obsidian notes via unlisted WordPress URLs with optional passwords and expiry. Includes vault:// redirect for Discord-clickable Obsidian links.
- * Version: 0.3.0
+ * Version: 0.4.0
  * Author: Quickli
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('QUICKLI_SHARE_VERSION', '0.3.0');
+define('QUICKLI_SHARE_VERSION', '0.4.0');
 define('QUICKLI_SHARE_VAULT_SLUG', 'vault');
 define('QUICKLI_SHARE_CPT', 'quickli_share');
 define('QUICKLI_SHARE_QUERY_VAR', 'quickli_share_token');
@@ -20,6 +20,8 @@ define('QUICKLI_SHARE_META_TOKEN', 'quickli_token');
 define('QUICKLI_SHARE_META_EXPIRES', 'quickli_expires_at');
 define('QUICKLI_SHARE_META_RAW', 'quickli_raw_markdown');
 define('QUICKLI_SHARE_META_NOTE_PATH', 'quickli_note_path');
+define('QUICKLI_SHARE_META_TYPE', 'quickli_share_type');
+define('QUICKLI_SHARE_META_FULL_HTML', 'quickli_full_html');
 
 function quickli_share_register_cpt() {
     $labels = array(
@@ -278,6 +280,16 @@ function quickli_share_render_by_token($token) {
         return;
     }
 
+    $share_type = get_post_meta($post_id, QUICKLI_SHARE_META_TYPE, true);
+    if ($share_type === 'html_document') {
+        $html = get_post_meta($post_id, QUICKLI_SHARE_META_FULL_HTML, true);
+        if (is_string($html) && $html !== '') {
+            quickli_share_render_html_document($html);
+            wp_reset_postdata();
+            return;
+        }
+    }
+
     $content = do_shortcode($post->post_content);
     quickli_share_render_page(get_the_title($post), $content, false);
     wp_reset_postdata();
@@ -327,6 +339,19 @@ function quickli_share_render_page($title, $content, $password_required) {
     echo '<h1>' . $safe_title . '</h1>';
     echo '<div class="content">' . $content . '</div>';
     echo '</div></body></html>';
+}
+
+function quickli_share_render_html_document($html) {
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: text/html; charset=utf-8', true);
+    quickli_share_send_noindex_headers();
+    nocache_headers();
+
+    echo $html;
+    exit;
 }
 
 function quickli_share_find_post_id_by_token($token) {
@@ -394,8 +419,15 @@ function quickli_share_rest_upsert(WP_REST_Request $request) {
     }
 
     $share_id = isset($params['share_id']) ? intval($params['share_id']) : 0;
-    $title = isset($params['title']) ? sanitize_text_field($params['title']) : 'Shared note';
-    $content_html = isset($params['content_html']) ? wp_kses_post($params['content_html']) : '';
+    $has_title = array_key_exists('title', $params);
+    $has_content_html = array_key_exists('content_html', $params);
+    $has_share_type = array_key_exists('share_type', $params);
+    $title = $has_title ? sanitize_text_field($params['title']) : 'Shared note';
+    $share_type = $has_share_type && $params['share_type'] === 'html_document' ? 'html_document' : 'note';
+    $content_html = '';
+    if ($has_content_html && is_string($params['content_html'])) {
+        $content_html = $share_type === 'html_document' ? $params['content_html'] : wp_kses_post($params['content_html']);
+    }
     $content_md = isset($params['content_md']) ? $params['content_md'] : '';
     $note_path = isset($params['note_path']) ? sanitize_text_field($params['note_path']) : '';
 
@@ -418,21 +450,35 @@ function quickli_share_rest_upsert(WP_REST_Request $request) {
             return new WP_REST_Response(array('error' => 'Share not found.'), 404);
         }
 
-        $updated_id = wp_update_post(array(
-            'ID' => $share_id,
-            'post_title' => $title,
-            'post_content' => $content_html,
-        ), true);
+        $existing_type = get_post_meta($share_id, QUICKLI_SHARE_META_TYPE, true) ?: 'note';
+        if (!$has_share_type) {
+            $share_type = $existing_type;
+            if ($has_content_html && is_string($params['content_html'])) {
+                $content_html = $share_type === 'html_document' ? $params['content_html'] : wp_kses_post($params['content_html']);
+            }
+        }
 
-        if (is_wp_error($updated_id)) {
-            return new WP_REST_Response(array('error' => $updated_id->get_error_message()), 500);
+        $post_update = array('ID' => $share_id);
+        if ($has_title) {
+            $post_update['post_title'] = $title;
+        }
+        if ($has_content_html) {
+            $post_update['post_content'] = $share_type === 'html_document' ? '<p>HTML document shared via Quickli.</p>' : $content_html;
+        }
+
+        if (count($post_update) > 1) {
+            $updated_id = wp_update_post($post_update, true);
+
+            if (is_wp_error($updated_id)) {
+                return new WP_REST_Response(array('error' => $updated_id->get_error_message()), 500);
+            }
         }
 
         $post_id = $share_id;
     } else {
         $post_id = wp_insert_post(array(
             'post_title' => $title,
-            'post_content' => $content_html,
+            'post_content' => $share_type === 'html_document' ? '<p>HTML document shared via Quickli.</p>' : $content_html,
             'post_status' => 'publish',
             'post_type' => QUICKLI_SHARE_CPT,
         ), true);
@@ -447,6 +493,17 @@ function quickli_share_rest_upsert(WP_REST_Request $request) {
 
     if (!empty($content_md)) {
         update_post_meta($post_id, QUICKLI_SHARE_META_RAW, $content_md);
+    }
+
+    if ($has_share_type || $has_content_html || !$share_id) {
+        update_post_meta($post_id, QUICKLI_SHARE_META_TYPE, $share_type);
+    }
+    if ($has_content_html) {
+        if ($share_type === 'html_document') {
+            update_post_meta($post_id, QUICKLI_SHARE_META_FULL_HTML, wp_slash($content_html));
+        } else {
+            delete_post_meta($post_id, QUICKLI_SHARE_META_FULL_HTML);
+        }
     }
 
     if ($note_path !== '') {
@@ -479,6 +536,7 @@ function quickli_share_rest_upsert(WP_REST_Request $request) {
         'url' => $url,
         'expires_at' => $expires_at > 0 ? $expires_at : null,
         'password_protected' => !empty(get_post($post_id)->post_password),
+        'share_type' => $share_type,
     );
 
     return new WP_REST_Response($response, 200);
@@ -500,6 +558,7 @@ function quickli_share_rest_get(WP_REST_Request $request) {
         'expires_at' => $expires_at ?: null,
         'password_protected' => !empty($post->post_password),
         'title' => $post->post_title,
+        'share_type' => get_post_meta($share_id, QUICKLI_SHARE_META_TYPE, true) ?: 'note',
     ), 200);
 }
 
