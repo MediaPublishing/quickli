@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quickli - Share Obsidian notes as unlisted web pages</title>
+  <meta name="description" content="Quickli pairs an Obsidian plugin with a WordPress plugin so you can share notes as unlisted pages, add passwords, set expiry, and revoke links in seconds." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg: #0c1018;
+      --bg-soft: #121827;
+      --surface: #171d2f;
+      --surface-2: #1b2537;
+      --surface-3: rgba(255, 255, 255, 0.04);
+      --stroke: rgba(255, 255, 255, 0.12);
+      --text: #f4f7fb;
+      --muted: #c1cada;
+      --accent: #8b6cff;
+      --accent-2: #6dd6ff;
+      --ok: #6be4a8;
+      --radius-xl: 22px;
+      --radius-lg: 16px;
+      --radius-md: 10px;
+      --shadow: 0 28px 60px rgba(3, 7, 18, 0.48);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: 90px; }
+
+    body {
+      margin: 0;
+      font-family: "Source Sans 3", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(760px 520px at 8% -8%, rgba(139, 108, 255, 0.24), transparent 68%),
+        radial-gradient(880px 560px at 96% 0%, rgba(109, 214, 255, 0.16), transparent 70%),
+        linear-gradient(180deg, #0b0f17 0%, #0a0d14 100%);
+      line-height: 1.5;
+    }
+
+    .wrap {
+      width: min(1180px, 92vw);
+      margin: 0 auto;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: blur(12px);
+      background: rgba(10, 13, 20, 0.78);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .nav {
+      min-height: 74px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-family: "Outfit", system-ui, sans-serif;
+      font-weight: 700;
+      font-size: 1.08rem;
+      letter-spacing: .01em;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font: 800 0.94rem "Outfit", system-ui, sans-serif;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+    }
+
+    .nav-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pill {
+      border: 1px solid var(--stroke);
+      color: var(--muted);
+      border-radius: 999px;
+      text-decoration: none;
+      padding: 7px 12px;
+      font-size: .83rem;
+      background: rgba(255, 255, 255, .03);
+      transition: border-color .18s ease, transform .18s ease;
+    }
+
+    .pill:hover {
+      border-color: rgba(255, 255, 255, 0.28);
+      transform: translateY(-1px);
+    }
+
+    .language-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .language-switch button {
+      border: 0;
+      border-radius: 6px;
+      padding: 5px 8px;
+      background: transparent;
+      color: var(--muted);
+      font: 700 .75rem "Outfit", system-ui, sans-serif;
+      cursor: pointer;
+    }
+
+    .language-switch button[aria-pressed="true"] {
+      color: #fff;
+      background: var(--accent);
+      box-shadow: 0 8px 18px rgba(139, 108, 255, .26);
+    }
+
+    main {
+      padding: 34px 0 84px;
+    }
+
+    .hero {
+      background: linear-gradient(180deg, rgba(27, 37, 55, 0.96), rgba(18, 24, 39, 0.96));
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      padding: clamp(22px, 3vw, 40px);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 460px;
+      height: 460px;
+      right: -170px;
+      top: -220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(109, 214, 255, .22), transparent 68%);
+      pointer-events: none;
+      filter: blur(10px);
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.02fr;
+      gap: 24px;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      line-height: 1.08;
+      font-family: "Outfit", system-ui, sans-serif;
+      letter-spacing: .01em;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 4.3vw, 3.5rem);
+      margin: 10px 0 14px;
+      max-width: 11ch;
+    }
+
+    .eyebrow {
+      color: var(--accent-2);
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-size: .76rem;
+    }
+
+    .sub {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 58ch;
+    }
+
+    .cta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .btn {
+      text-decoration: none;
+      border-radius: 8px;
+      padding: 12px 17px;
+      font-weight: 700;
+      font-family: "Outfit", system-ui, sans-serif;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #7251ff);
+      color: #fff;
+      box-shadow: 0 16px 28px rgba(139, 108, 255, 0.28);
+    }
+
+    .btn-secondary {
+      border: 1px solid var(--stroke);
+      color: #fff;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .microcopy {
+      color: var(--muted);
+      font-size: .92rem;
+      margin: 0;
+    }
+
+    .hero-surface {
+      position: relative;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .surface-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
+    .hero-shots {
+      display: grid;
+      grid-template-columns: 1.05fr .88fr;
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .stack {
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .screen {
+      margin: 0;
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: #fff;
+      min-height: 0;
+      box-shadow: 0 22px 44px rgba(0, 0, 0, 0.24);
+    }
+
+    .screen img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      cursor: zoom-in;
+    }
+
+    .screen-main {
+      aspect-ratio: 1.1 / 1;
+    }
+
+    .screen-small {
+      aspect-ratio: 1.3 / .9;
+    }
+
+    .screen-label {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1;
+      background: rgba(7, 10, 18, 0.78);
+      color: #fff;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font: 700 .74rem "Outfit", system-ui, sans-serif;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    .section {
+      margin-top: 34px;
+    }
+
+    .section-head {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .section-head h2 {
+      font-size: clamp(1.5rem, 2.8vw, 2.35rem);
+    }
+
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1rem;
+      max-width: 66ch;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .step,
+    .install-card,
+    .workflow-card,
+    .native-card,
+    .faq-card {
+      background: linear-gradient(180deg, rgba(23, 29, 47, 0.95), rgba(17, 23, 37, 0.96));
+      border: 1px solid var(--stroke);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 16px 36px rgba(2, 6, 16, 0.28);
+    }
+
+    .step .num {
+      color: var(--accent-2);
+      font: 700 .76rem "Outfit", system-ui, sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .step p,
+    .install-card p,
+    .workflow-card p,
+    .native-card p,
+    .faq-card p {
+      color: var(--muted);
+      margin: 10px 0 0;
+    }
+
+    .install-grid,
+    .workflow-grid,
+    .split {
+      display: grid;
+      gap: 16px;
+    }
+
+    .install-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .workflow-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .split {
+      grid-template-columns: 1.05fr .95fr;
+      align-items: start;
+    }
+
+    .install-card .kicker,
+    .native-card .kicker {
+      color: var(--accent-2);
+      font: 700 .76rem "Outfit", system-ui, sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .download-url {
+      display: block;
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #d9e2f0;
+      font: 600 .86rem ui-monospace, SFMono-Regular, Menlo, monospace;
+      word-break: break-all;
+    }
+
+    .install-card .btn {
+      margin-top: 14px;
+    }
+
+    .install-list {
+      margin: 14px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+
+    .install-list li + li {
+      margin-top: 8px;
+    }
+
+    .workflow-shot {
+      margin-top: 14px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      aspect-ratio: 1.25 / .9;
+      background: #fff;
+    }
+
+    .workflow-shot img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      cursor: zoom-in;
+    }
+
+    .workflow-caption {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .check {
+      list-style: none;
+      margin: 16px 0 0;
+      padding: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .check li {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      color: #eff4ff;
+    }
+
+    .check li::before {
+      content: "✓";
+      color: var(--ok);
+      font-weight: 800;
+      line-height: 1;
+      margin-top: 3px;
+      flex: 0 0 auto;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .stat {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .stat strong {
+      display: block;
+      font: 700 1.65rem "Outfit", system-ui, sans-serif;
+      margin-bottom: 4px;
+    }
+
+    .faq {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    details {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    summary {
+      cursor: pointer;
+      font: 700 1rem "Outfit", system-ui, sans-serif;
+      list-style: none;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    details p {
+      margin: 10px 0 0;
+    }
+
+    .thumbs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .thumbs img {
+      width: 100%;
+      display: block;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #fff;
+      cursor: zoom-in;
+    }
+
+    .repo-box {
+      margin-top: 34px;
+      padding: 18px;
+      border-radius: 16px;
+      border: 1px solid var(--stroke);
+      background: rgba(255, 255, 255, 0.03);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .repo-box code {
+      color: #d6def0;
+      word-break: break-all;
+      font-size: .9rem;
+    }
+
+    footer {
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: .9rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    footer a {
+      color: #fff;
+    }
+
+    .zoom-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 8, 14, 0.82);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 100;
+    }
+
+    .zoom-modal.open {
+      display: flex;
+    }
+
+    .zoom-inner {
+      width: min(1040px, 100%);
+      background: #0d1320;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .zoom-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font: 700 .96rem "Outfit", system-ui, sans-serif;
+    }
+
+    .zoom-close {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      color: #fff;
+      padding: 8px 12px;
+      cursor: pointer;
+      font: 700 .8rem "Outfit", system-ui, sans-serif;
+    }
+
+    .zoom-media {
+      padding: 16px;
+      background: #fff;
+    }
+
+    .zoom-media img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid,
+      .split,
+      .install-grid,
+      .workflow-grid,
+      .steps {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-shots {
+        grid-template-columns: 1fr;
+      }
+
+      .stack {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: none;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .wrap {
+        width: min(100% - 20px, 100%);
+      }
+
+      .hero,
+      .step,
+      .install-card,
+      .workflow-card,
+      .native-card,
+      .faq-card,
+      .repo-box {
+        border-radius: 14px;
+      }
+
+      .stack {
+        grid-template-columns: 1fr;
+      }
+
+      .thumbs,
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      .btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap nav">
+      <div class="brand">
+        <span class="brand-mark">Q</span>
+        <span>Quickli</span>
+      </div>
+      <div class="nav-actions">
+        <div class="language-switch" data-language-switcher aria-label="Language">
+          <button type="button" data-lang-choice="en" aria-pressed="true">EN</button>
+          <button type="button" data-lang-choice="de" aria-pressed="false">DE</button>
+        </div>
+        <a class="pill" href="#install" data-i18n="nav.install">Install</a>
+        <a class="pill" href="https://github.com/MediaPublishing/quickli" target="_blank" rel="noopener noreferrer" data-i18n="nav.source">Source</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <div class="hero-grid">
+        <div>
+          <div class="eyebrow" data-i18n="hero.eyebrow">Share. Protect. Revoke.</div>
+          <h1 data-i18n="hero.title">Turn any Obsidian note into a private web link.</h1>
+          <p class="sub" data-i18n="hero.sub">Quickli pairs an Obsidian plugin with a WordPress plugin so you can publish notes as unlisted pages, add passwords, set expiry, and revoke links without leaving your vault.</p>
+
+          <div class="cta">
+            <a class="btn btn-primary" href="/downloads/quickli-obsidian-plugin.zip" data-i18n="hero.ctaPrimary">Download Obsidian plugin</a>
+            <a class="btn btn-secondary" href="#workflow" data-i18n="hero.ctaSecondary">See workflow</a>
+          </div>
+
+          <p class="microcopy" data-i18n="hero.microcopy">Use your own WordPress site. No hosted Quickli account, no separate publishing dashboard.</p>
+        </div>
+
+        <div class="hero-surface">
+          <div class="surface-meta">
+            <span data-i18n="shots.realViews">Real product views</span>
+            <span data-i18n="shots.zoomHint">Click screenshots to zoom</span>
+          </div>
+          <div class="hero-shots">
+            <figure class="screen screen-main">
+              <span class="screen-label" data-i18n="label.shared">Shared page</span>
+              <img class="zoomable" src="/assets/screenshots/app/shared-page.png" alt="Quickli shared note page screenshot" data-label="Shared page" data-i18n-attr="alt:alt.shared;data-label:label.shared" />
+            </figure>
+            <div class="stack">
+              <figure class="screen screen-small">
+                <span class="screen-label" data-i18n="label.modal">Share modal</span>
+                <img class="zoomable" src="/assets/screenshots/app/share-modal.png" alt="Quickli share modal screenshot" data-label="Share modal" data-i18n-attr="alt:alt.modal;data-label:label.modal" />
+              </figure>
+              <figure class="screen screen-small">
+                <span class="screen-label" data-i18n="label.settings">Settings</span>
+                <img class="zoomable" src="/assets/screenshots/app/settings.png" alt="Quickli settings screenshot" data-label="Settings" data-i18n-attr="alt:alt.settings;data-label:label.settings" />
+              </figure>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2 data-i18n="steps.title">Start in 3 steps</h2>
+        <p data-i18n="steps.sub">Quickli is not a SaaS app. It is a small bridge between your Obsidian vault and your own WordPress site.</p>
+      </div>
+      <div class="steps">
+        <article class="step">
+          <div class="num" data-i18n="steps.one.num">Step 01</div>
+          <h3 data-i18n="steps.one.title">Install the WordPress plugin</h3>
+          <p data-i18n="steps.one.body">Upload the Quickli Share ZIP in WordPress and activate it. That gives your site the unlisted share route and REST API.</p>
+        </article>
+        <article class="step">
+          <div class="num" data-i18n="steps.two.num">Step 02</div>
+          <h3 data-i18n="steps.two.title">Add the Obsidian plugin</h3>
+          <p data-i18n="steps.two.body">Copy the plugin folder into your vault's Community Plugins directory, enable it, and enter your WordPress application password.</p>
+        </article>
+        <article class="step">
+          <div class="num" data-i18n="steps.three.num">Step 03</div>
+          <h3 data-i18n="steps.three.title">Share and control the link</h3>
+          <p data-i18n="steps.three.body">Publish a note, add a password or expiry if needed, then copy, open, update, or revoke the share directly from Obsidian.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="install">
+      <div class="section-head">
+        <h2 data-i18n="install.title">Install both sides cleanly</h2>
+        <p data-i18n="install.sub">Quickli has one ZIP for WordPress and one ZIP for Obsidian. Use both if you want the full flow shown on this page.</p>
+      </div>
+      <div class="install-grid">
+        <article class="install-card">
+          <div class="kicker" data-i18n="install.wp.kicker">WordPress</div>
+          <h3 data-i18n="install.wp.title">Quickli Share plugin</h3>
+          <p data-i18n="install.wp.body">Installs the REST endpoint, unlisted `/q/<token>/` pages, expiry cleanup, and vault redirect support on your own site.</p>
+          <code class="download-url">quickli-landing.pages.dev/downloads/quickli-wordpress-plugin.zip</code>
+          <a class="btn btn-primary" href="/downloads/quickli-wordpress-plugin.zip" data-i18n="install.wp.cta">Download WordPress plugin</a>
+          <ul class="install-list">
+            <li data-i18n="install.wp.one">In WordPress, open Plugins → Add New Plugin → Upload Plugin.</li>
+            <li data-i18n="install.wp.two">Choose `quickli-wordpress-plugin.zip` and activate it.</li>
+            <li data-i18n="install.wp.three">Create an Application Password for the user that should manage shares.</li>
+          </ul>
+        </article>
+
+        <article class="install-card">
+          <div class="kicker" data-i18n="install.obs.kicker">Obsidian</div>
+          <h3 data-i18n="install.obs.title">Quickli Share plugin</h3>
+          <p data-i18n="install.obs.body">Adds the share modal, share status, password updates, revoke action, and optional local image uploads inside Obsidian.</p>
+          <code class="download-url">quickli-landing.pages.dev/downloads/quickli-obsidian-plugin.zip</code>
+          <a class="btn btn-primary" href="/downloads/quickli-obsidian-plugin.zip" data-i18n="install.obs.cta">Download Obsidian plugin</a>
+          <ul class="install-list">
+            <li data-i18n="install.obs.one">Unzip the download into `.obsidian/plugins/quickli-share/` in your vault.</li>
+            <li data-i18n="install.obs.two">Enable Quickli Share in Community Plugins.</li>
+            <li data-i18n="install.obs.three">Add your site URL, username, and WordPress application password in Settings.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="workflow">
+      <div class="section-head">
+        <h2 data-i18n="workflow.title">See the workflow clearly</h2>
+        <p data-i18n="workflow.sub">These are real sanitized product views from the repository. They show the setup, the share modal, and the resulting reading page.</p>
+      </div>
+      <div class="workflow-grid">
+        <article class="workflow-card">
+          <h3 data-i18n="workflow.settings.title">Connect your site once</h3>
+          <p data-i18n="workflow.settings.body">Add the base URL, username, application password, default expiry, and media upload preferences in the plugin settings.</p>
+          <div class="workflow-shot">
+            <img class="zoomable" src="/assets/screenshots/app/settings.png" alt="Quickli settings full screenshot" data-label="Settings" data-i18n-attr="alt:alt.settingsFull;data-label:label.settings" />
+          </div>
+          <div class="workflow-caption" data-i18n="workflow.settings.caption">Obsidian settings · site connection and defaults</div>
+        </article>
+        <article class="workflow-card">
+          <h3 data-i18n="workflow.modal.title">Share without leaving the note</h3>
+          <p data-i18n="workflow.modal.body">Open the modal, set an optional password, choose expiry, or leave the share open-ended if the note should stay available.</p>
+          <div class="workflow-shot">
+            <img class="zoomable" src="/assets/screenshots/app/share-modal.png" alt="Quickli share modal full screenshot" data-label="Share modal" data-i18n-attr="alt:alt.modalFull;data-label:label.modal" />
+          </div>
+          <div class="workflow-caption" data-i18n="workflow.modal.caption">Share modal · password and expiry control</div>
+        </article>
+        <article class="workflow-card">
+          <h3 data-i18n="workflow.page.title">Deliver a clean reading page</h3>
+          <p data-i18n="workflow.page.body">Readers get an uncluttered note page instead of a blog post shell. You keep the source in Obsidian and control access from there.</p>
+          <div class="workflow-shot">
+            <img class="zoomable" src="/assets/screenshots/app/shared-page.png" alt="Quickli shared page full screenshot" data-label="Shared page" data-i18n-attr="alt:alt.sharedFull;data-label:label.shared" />
+          </div>
+          <div class="workflow-caption" data-i18n="workflow.page.caption">Shared page · reading view on your WordPress site</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section split">
+      <article class="native-card">
+        <div class="kicker" data-i18n="security.kicker">Security + control</div>
+        <h2 data-i18n="security.title">Built for private note sharing, not public publishing.</h2>
+        <p data-i18n="security.lede">Quickli keeps the authoring workflow in Obsidian and uses your own WordPress site only as the delivery layer. The share path stays lightweight and reversible.</p>
+        <ul class="check">
+          <li data-i18n="security.one">Unlisted tokenized URLs instead of indexed public posts</li>
+          <li data-i18n="security.two">Optional password protection for each shared note</li>
+          <li data-i18n="security.three">Optional expiry with cleanup for outdated shares</li>
+          <li data-i18n="security.four">Noindex headers on share pages</li>
+          <li data-i18n="security.five">Revoke links directly from Obsidian</li>
+          <li data-i18n="security.six">Optional upload of local images before publish</li>
+        </ul>
+        <div class="stats">
+          <div class="stat">
+            <strong>2</strong>
+            <span data-i18n="security.statOne">small plugins instead of a hosted platform</span>
+          </div>
+          <div class="stat">
+            <strong>4</strong>
+            <span data-i18n="security.statTwo">core share controls: unlisted, password, expiry, revoke</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="faq-card">
+        <h2 data-i18n="faq.title">FAQ + screenshot gallery</h2>
+        <div class="faq">
+          <details>
+            <summary data-i18n="faq.one.q">Do I need Quickli hosting to use this?</summary>
+            <p data-i18n="faq.one.a">No. Quickli uses your own WordPress site and your own Obsidian vault. There is no separate hosted Quickli account in this repo.</p>
+          </details>
+          <details>
+            <summary data-i18n="faq.two.q">Can I self-host everything?</summary>
+            <p data-i18n="faq.two.a">Yes. The WordPress plugin runs on your site, the Obsidian plugin runs locally in your vault, and the source code is in the public GitHub repo.</p>
+          </details>
+          <details>
+            <summary data-i18n="faq.three.q">What happens to local images inside a note?</summary>
+            <p data-i18n="faq.three.a">If you enable image upload, Quickli uploads local images to the WordPress Media library before publishing and replaces the links in the shared output.</p>
+          </details>
+          <details>
+            <summary data-i18n="faq.four.q">Can I update or revoke a link later?</summary>
+            <p data-i18n="faq.four.a">Yes. Existing shares can be updated, password state can change, and links can be revoked from Obsidian without creating duplicates.</p>
+          </details>
+          <details>
+            <summary data-i18n="faq.five.q">Is the current quickli.net homepage already this landing page?</summary>
+            <p data-i18n="faq.five.a">No. The current quickli.net root still serves an older WordPress homepage. This Pages-based landing page is the new product-facing version.</p>
+          </details>
+        </div>
+        <div class="thumbs">
+          <img class="zoomable" src="/assets/screenshots/app/settings.png" alt="Quickli thumbnail settings screenshot" data-label="Settings" data-i18n-attr="alt:alt.thumbSettings;data-label:label.settings" />
+          <img class="zoomable" src="/assets/screenshots/app/share-modal.png" alt="Quickli thumbnail share modal screenshot" data-label="Share modal" data-i18n-attr="alt:alt.thumbModal;data-label:label.modal" />
+          <img class="zoomable" src="/assets/screenshots/app/shared-page.png" alt="Quickli thumbnail shared page screenshot" data-label="Shared page" data-i18n-attr="alt:alt.thumbShared;data-label:label.shared" />
+        </div>
+      </article>
+    </section>
+
+    <div class="repo-box">
+      <div>
+        <strong data-i18n="repo.title">Source code</strong><br />
+        <code>https://github.com/MediaPublishing/quickli</code>
+      </div>
+      <a class="btn btn-secondary" href="https://github.com/MediaPublishing/quickli" target="_blank" rel="noopener noreferrer" data-i18n="repo.cta">Open GitHub repo</a>
+    </div>
+
+    <footer>
+      <span data-i18n="footer.tagline">Quickli • Obsidian to WordPress sharing without a hosted middle layer</span>
+      <span>Downloads: <a href="/downloads/quickli-wordpress-plugin.zip">WordPress</a> · <a href="/downloads/quickli-obsidian-plugin.zip">Obsidian</a></span>
+    </footer>
+  </main>
+
+  <div id="zoom-modal" class="zoom-modal" aria-hidden="true">
+    <div class="zoom-inner">
+      <div class="zoom-head">
+        <span id="zoom-label">Screenshot</span>
+        <button class="zoom-close" id="zoom-close" type="button" data-i18n="modal.close">Close</button>
+      </div>
+      <div class="zoom-media">
+        <img id="zoom-image" src="" alt="Enlarged screenshot preview" data-i18n-attr="alt:alt.zoom" />
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js" defer charset="utf-8"></script>
+</body>
+</html>

@@ -12,3 +12,5 @@ yarn-error.log*
 
 # Optional local packaging artifacts
 *.tmp
+.wrangler/
+dist/
